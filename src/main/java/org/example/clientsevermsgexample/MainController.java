@@ -10,6 +10,7 @@ import javafx.scene.Group;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.io.DataInputStream;
@@ -24,6 +25,10 @@ import java.util.ResourceBundle;
 import static java.lang.Thread.sleep;
 
 public class MainController implements Initializable {
+
+    private Socket chatSocket;
+
+
     @FXML
     private ComboBox dropdownPort;
 
