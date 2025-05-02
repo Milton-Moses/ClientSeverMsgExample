@@ -2,6 +2,7 @@ package org.example.clientsevermsgexample;
 
 
 
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -26,8 +27,14 @@ import static java.lang.Thread.sleep;
 
 public class MainController implements Initializable {
 
+    public Button user1_client;
+    public Button user2_server;
     private Socket chatSocket;
-
+    private DataInputStream chatDis;
+    private DataOutputStream chatDos;
+    private boolean isChatRunning = false;
+    private Stage chatStage;
+    private VBox chatMessageBox;
 
     @FXML
     private ComboBox dropdownPort;
@@ -69,6 +76,132 @@ public class MainController implements Initializable {
 
     Label lb122, lb12;
     TextField msgText;
+
+    @FXML
+    void startChatAsUser1(ActionEvent event) {
+        startChatWindow("User 1");
+        connectAsClient();
+    }
+
+    @FXML
+    void startChatAsUser2(ActionEvent event) {
+        startChatWindow("User 2");
+        startChatServer();
+    }
+
+    private void startChatWindow(String title) {
+        try {
+            chatStage = new Stage();
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("chat_form.fxml"));
+            Parent root = loader.load();
+
+            // Get UI references
+            chatMessageBox = (VBox) root.lookup("#vbox_messages");
+            TextField messageField = (TextField) root.lookup("#tf_message");
+            Button sendButton = (Button) root.lookup("#button_send");
+
+            // Set up event handlers
+            sendButton.setOnAction(e -> sendChatMessage(messageField.getText()));
+            messageField.setOnAction(e -> {
+                sendChatMessage(messageField.getText());
+                messageField.clear();
+            });
+
+            Scene scene = new Scene(root);
+            chatStage.setScene(scene);
+            chatStage.setTitle(title);
+            chatStage.setOnCloseRequest(e -> stopChat());
+            chatStage.show();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void connectAsClient() {
+        new Thread(() -> {
+            try {
+                chatSocket = new Socket("localhost", 6667);
+                setupChatStreams();
+                appendMessage("Connected to chat server!");
+                listenForMessages();
+            } catch (IOException e) {
+                appendMessage("Connection error: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void startChatServer() {
+        new Thread(() -> {
+            try {
+                ServerSocket serverSocket = new ServerSocket(6667);
+                appendMessage("Waiting for connection...");
+                chatSocket = serverSocket.accept();
+                serverSocket.close();
+                setupChatStreams();
+                appendMessage("User connected!");
+                listenForMessages();
+            } catch (IOException e) {
+                appendMessage("Server error: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void setupChatStreams() throws IOException {
+        chatDis = new DataInputStream(chatSocket.getInputStream());
+        chatDos = new DataOutputStream(chatSocket.getOutputStream());
+        isChatRunning = true;
+    }
+
+    private void sendChatMessage(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+
+        try {
+            chatDos.writeUTF(message);
+            chatDos.flush();
+            appendMessage("You: " + message);
+        } catch (IOException e) {
+            appendMessage("Failed to send message: " + e.getMessage());
+        }
+    }
+
+    private void listenForMessages() {
+        try {
+            while (isChatRunning) {
+                String message = chatDis.readUTF();
+                appendMessage("Other: " + message);
+            }
+        } catch (IOException e) {
+            if (isChatRunning) {
+                appendMessage("Connection lost: " + e.getMessage());
+            }
+        }
+    }
+
+    private void appendMessage(String message) {
+        Platform.runLater(() -> {
+            Label messageLabel = new Label(message);
+            messageLabel.setWrapText(true);
+            messageLabel.setStyle("-fx-padding: 5px;");
+            chatMessageBox.getChildren().add(messageLabel);
+
+            // Auto-scroll to bottom
+            chatMessageBox.heightProperty().addListener((obs, oldVal, newVal) -> {
+                ((ScrollPane) chatMessageBox.getParent()).setVvalue(1.0);
+            });
+        });
+    }
+
+    private void stopChat() {
+        isChatRunning = false;
+        try {
+            if (chatDis != null) chatDis.close();
+            if (chatDos != null) chatDos.close();
+            if (chatSocket != null) chatSocket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     @FXML
     void checkConnection(ActionEvent event) {
